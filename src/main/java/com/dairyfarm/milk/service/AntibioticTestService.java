@@ -9,6 +9,7 @@ import com.dairyfarm.milk.common.enums.ApprovalStatusEnum;
 import com.dairyfarm.milk.common.enums.BatchStatusEnum;
 import com.dairyfarm.milk.common.enums.RejectTypeEnum;
 import com.dairyfarm.milk.common.enums.TankStatusEnum;
+import com.dairyfarm.milk.common.enums.TestCategoryEnum;
 import com.dairyfarm.milk.common.enums.TestResultEnum;
 import com.dairyfarm.milk.common.exception.BusinessException;
 import com.dairyfarm.milk.dto.AntibioticTestSubmitDTO;
@@ -59,6 +60,7 @@ public class AntibioticTestService {
         test.setPastureId(batch.getPastureId());
         test.setLabId(UserContext.getUserId());
         test.setTestType(dto.getTestType());
+        test.setTestCategory(TestCategoryEnum.QUICK.getCode());
         test.setTestMethod(dto.getTestMethod());
         test.setTestResult(dto.getTestResult());
         test.setTestValue(dto.getTestValue());
@@ -150,5 +152,73 @@ public class AntibioticTestService {
 
     public AntibioticTest getTestDetail(Long id) {
         return antibioticTestMapper.selectById(id);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public AntibioticTest submitRecheck(Long parentTestId, AntibioticTestSubmitDTO dto) {
+        AntibioticTest parentTest = antibioticTestMapper.selectById(parentTestId);
+        if (parentTest == null) {
+            throw new BusinessException("原检测记录不存在");
+        }
+
+        MilkBatch batch = milkBatchMapper.selectById(parentTest.getBatchId());
+        if (batch == null) {
+            throw new BusinessException("批次不存在");
+        }
+
+        String testNo = "FJ" + DateUtil.format(LocalDateTime.now(), "yyyyMMddHHmmss") + IdUtil.randomUUID().substring(0, 4).toUpperCase();
+
+        AntibioticTest recheckTest = new AntibioticTest();
+        recheckTest.setParentId(parentTestId);
+        recheckTest.setTestNo(testNo);
+        recheckTest.setBatchId(parentTest.getBatchId());
+        recheckTest.setTankId(parentTest.getTankId());
+        recheckTest.setPastureId(parentTest.getPastureId());
+        recheckTest.setLabId(UserContext.getUserId());
+        recheckTest.setTestType(dto.getTestType() != null ? dto.getTestType() : parentTest.getTestType());
+        recheckTest.setTestCategory(TestCategoryEnum.RECHECK.getCode());
+        recheckTest.setTestMethod(dto.getTestMethod());
+        recheckTest.setTestResult(dto.getTestResult());
+        recheckTest.setTestValue(dto.getTestValue());
+        recheckTest.setTestTime(dto.getTestTime());
+        recheckTest.setIsLocked(parentTest.getIsLocked());
+        recheckTest.setApproveStatus(ApprovalStatusEnum.PENDING.getCode());
+        recheckTest.setApproverId(null);
+        recheckTest.setApproveTime(null);
+        recheckTest.setApproveRemark(null);
+        recheckTest.setRemark(dto.getRemark());
+        antibioticTestMapper.insert(recheckTest);
+
+        if (parentTest.getIsLocked() == null || parentTest.getIsLocked() == 0) {
+            if (TestResultEnum.PASSED.getCode().equals(dto.getTestResult())) {
+                batch.setBatchStatus(BatchStatusEnum.TEST_PASSED.getCode());
+                LambdaQueryWrapper<RejectRecord> rejectWrapper = new LambdaQueryWrapper<>();
+                rejectWrapper.eq(RejectRecord::getBatchId, batch.getId());
+                RejectRecord reject = rejectRecordMapper.selectOne(rejectWrapper);
+                if (reject != null) {
+                    rejectRecordMapper.deleteById(reject.getId());
+                }
+                MilkTank tank = milkTankMapper.selectById(batch.getTankId());
+                if (tank != null && TankStatusEnum.PENDING_CLEAN.getCode().equals(tank.getTankStatus())) {
+                    tank.setTankStatus(TankStatusEnum.TESTED.getCode());
+                    milkTankMapper.updateById(tank);
+                }
+            } else {
+                batch.setBatchStatus(BatchStatusEnum.TEST_FAILED.getCode());
+            }
+            milkBatchMapper.updateById(batch);
+        }
+
+        approvalService.createTestResultApproval(recheckTest.getId());
+
+        log.info("提交复检记录成功，复检单号: {}，原检测单: {}", testNo, parentTest.getTestNo());
+        return recheckTest;
+    }
+
+    public Page<AntibioticTest> getRecheckList(Long parentTestId, Long pageNum, Long pageSize) {
+        LambdaQueryWrapper<AntibioticTest> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(AntibioticTest::getParentId, parentTestId);
+        wrapper.orderByDesc(AntibioticTest::getTestTime);
+        return antibioticTestMapper.selectPage(new Page<>(pageNum, pageSize), wrapper);
     }
 }

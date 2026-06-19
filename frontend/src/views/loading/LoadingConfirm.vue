@@ -24,35 +24,49 @@
             <el-option
               v-for="batch in passedBatches"
               :key="batch.id"
-              :label="`${batch.batchNo} - ${batch.milkTankName} - ${batch.milkVolume}kg`"
+              :label="`${batch.batchNo} - ${batch.milkVolume}升`"
               :value="batch.id">
             </el-option>
           </el-select>
-          <div v-if="selectedBatch" style="margin-top: 10px;">
+
+          <div v-if="entranceStatus" style="margin-top: 15px;">
             <el-alert
-              title="批次检测状态"
-              :type="selectedBatch.batchStatus === 'TEST_PASSED' ? 'success' : 'error'"
+              :title="entranceStatus.isLocked ? '装车入口已锁定' : '批次检测状态'"
+              :type="entranceStatus.canLoad ? 'success' : 'error'"
               :closable="false">
-              <p>批次状态：{{ selectedBatch.batchStatus | formatStatus('batch') }}</p>
-              <p v-if="selectedBatch.batchStatus !== 'TEST_PASSED'" style="color: #f56c6c;">
-                该批次检测未通过，不能装车！
+              <p>批次状态：{{ entranceStatus.batchStatusDesc }}</p>
+              <p v-if="entranceStatus.latestTestResult">
+                最新检测结果：
+                <el-tag :type="entranceStatus.latestTestResult === 'PASSED' ? 'success' : 'danger'" size="mini">
+                  {{ entranceStatus.latestTestResultDesc }}
+                </el-tag>
+              </p>
+              <p v-if="entranceStatus.testTime">检测时间：{{ entranceStatus.testTime | formatDate }}</p>
+              <p v-if="entranceStatus.isLocked" style="color: #f56c6c; font-weight: bold; margin-top: 8px;">
+                <i class="el-icon-lock"></i> 入口已锁定
+              </p>
+              <p v-if="entranceStatus.lockReason" style="margin-top: 5px; color: #f56c6c;">
+                原因：{{ entranceStatus.lockReason }}
+              </p>
+              <p v-if="entranceStatus.rejectType" style="margin-top: 5px;">
+                拒收类型：{{ entranceStatus.rejectTypeDesc }}
               </p>
             </el-alert>
           </div>
         </el-form-item>
 
-        <el-form-item label="车牌号" prop="plateNo">
-          <el-input v-model="form.plateNo" placeholder="请输入车牌号" />
+        <el-form-item label="车牌号" prop="truckNo">
+          <el-input v-model="form.truckNo" placeholder="请输入车牌号" />
         </el-form-item>
 
-        <el-form-item label="司机姓名" prop="driverName">
-          <el-input v-model="form.driverName" placeholder="请输入司机姓名" />
+        <el-form-item label="运输责任人">
+          <el-input v-model="form.transporterName" placeholder="请输入运输责任人姓名（选填）" />
         </el-form-item>
 
-        <el-form-item label="装车量(kg)" prop="loadedVolume">
-          <el-input-number v-model="form.loadedVolume" :min="1" :max="selectedBatch?.milkVolume || 10000" style="width: 100%;" />
-          <span v-if="selectedBatch" style="color: #909399; font-size: 12px;">
-            批次总奶量：{{ selectedBatch.milkVolume }}kg
+        <el-form-item label="装车量(升)" prop="loadVolume">
+          <el-input-number v-model="form.loadVolume" :min="1" :max="entranceStatus?.milkVolume || 10000" style="width: 100%;" />
+          <span v-if="entranceStatus" style="color: #909399; font-size: 12px;">
+            批次总奶量：{{ entranceStatus.milkVolume }}升
           </span>
         </el-form-item>
 
@@ -60,16 +74,12 @@
           <el-input v-model="form.destination" placeholder="请输入运输目的地（选填）" />
         </el-form-item>
 
-        <el-form-item label="装车时间" prop="loadingTime">
+        <el-form-item label="装车时间" prop="loadTime">
           <el-date-picker
-            v-model="form.loadingTime"
+            v-model="form.loadTime"
             type="datetime"
             placeholder="选择装车时间"
             style="width: 100%;" />
-        </el-form-item>
-
-        <el-form-item label="封铅号">
-          <el-input v-model="form.sealNo" placeholder="请输入封铅号（选填）" />
         </el-form-item>
 
         <el-form-item label="备注">
@@ -81,7 +91,8 @@
             type="primary"
             @click="submitForm"
             :loading="loading"
-            :disabled="selectedBatch && selectedBatch.batchStatus !== 'TEST_PASSED'">
+            :disabled="!entranceStatus?.canLoad">
+            <i v-if="entranceStatus?.isLocked" class="el-icon-lock"></i>
             确认装车
           </el-button>
           <el-button @click="resetForm">重置</el-button>
@@ -92,7 +103,7 @@
 </template>
 
 <script>
-import { confirmLoading } from '@/api/loading'
+import { confirmLoading, getLoadingEntranceStatus } from '@/api/loading'
 import { getBatchList } from '@/api/batch'
 
 export default {
@@ -101,23 +112,21 @@ export default {
     return {
       loading: false,
       passedBatches: [],
-      selectedBatch: null,
+      entranceStatus: null,
       form: {
         batchId: null,
-        plateNo: '',
-        driverName: '',
-        loadedVolume: null,
+        truckNo: '',
+        transporterName: '',
+        loadVolume: null,
         destination: '',
-        loadingTime: null,
-        sealNo: '',
+        loadTime: null,
         remark: ''
       },
       rules: {
         batchId: [{ required: true, message: '请选择批次', trigger: 'change' }],
-        plateNo: [{ required: true, message: '请输入车牌号', trigger: 'blur' }],
-        driverName: [{ required: true, message: '请输入司机姓名', trigger: 'blur' }],
-        loadedVolume: [{ required: true, message: '请输入装车量', trigger: 'blur' }],
-        loadingTime: [{ required: true, message: '请选择装车时间', trigger: 'change' }]
+        truckNo: [{ required: true, message: '请输入车牌号', trigger: 'blur' }],
+        loadVolume: [{ required: true, message: '请输入装车量', trigger: 'blur' }],
+        loadTime: [{ required: true, message: '请选择装车时间', trigger: 'change' }]
       }
     }
   },
@@ -131,19 +140,28 @@ export default {
         this.passedBatches = res.data?.records || []
       } catch (error) {
         console.error('加载合格批次失败:', error)
+        this.$message.error('加载合格批次失败')
       }
     },
-    onBatchChange(batchId) {
-      this.selectedBatch = this.passedBatches.find(b => b.id === batchId) || null
-      if (this.selectedBatch) {
-        this.form.loadedVolume = this.selectedBatch.milkVolume
+    async onBatchChange(batchId) {
+      this.entranceStatus = null
+      if (!batchId) return
+
+      try {
+        const res = await getLoadingEntranceStatus(batchId)
+        this.entranceStatus = res.data
+        if (this.entranceStatus?.milkVolume) {
+          this.form.loadVolume = this.entranceStatus.milkVolume
+        }
+      } catch (error) {
+        console.error('获取装车入口状态失败:', error)
       }
     },
     async submitForm() {
       this.$refs.loadingForm.validate(async valid => {
         if (valid) {
-          if (this.selectedBatch && this.selectedBatch.batchStatus !== 'TEST_PASSED') {
-            this.$message.error('该批次检测未通过，不能装车')
+          if (!this.entranceStatus?.canLoad) {
+            this.$message.error(this.entranceStatus?.lockReason || '该批次不允许装车')
             return
           }
           this.loading = true
@@ -161,7 +179,7 @@ export default {
     },
     resetForm() {
       this.$refs.loadingForm.resetFields()
-      this.selectedBatch = null
+      this.entranceStatus = null
     }
   }
 }

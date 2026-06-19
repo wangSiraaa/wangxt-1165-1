@@ -6,16 +6,23 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.dairyfarm.milk.common.context.UserContext;
 import com.dairyfarm.milk.common.enums.BatchStatusEnum;
+import com.dairyfarm.milk.common.enums.RejectTypeEnum;
 import com.dairyfarm.milk.common.enums.RoleEnum;
 import com.dairyfarm.milk.common.enums.TankStatusEnum;
+import com.dairyfarm.milk.common.enums.TestResultEnum;
 import com.dairyfarm.milk.common.exception.BusinessException;
 import com.dairyfarm.milk.dto.LoadingConfirmDTO;
+import com.dairyfarm.milk.entity.AntibioticTest;
 import com.dairyfarm.milk.entity.LoadingRecord;
 import com.dairyfarm.milk.entity.MilkBatch;
 import com.dairyfarm.milk.entity.MilkTank;
+import com.dairyfarm.milk.entity.RejectRecord;
+import com.dairyfarm.milk.mapper.AntibioticTestMapper;
 import com.dairyfarm.milk.mapper.LoadingRecordMapper;
 import com.dairyfarm.milk.mapper.MilkBatchMapper;
 import com.dairyfarm.milk.mapper.MilkTankMapper;
+import com.dairyfarm.milk.mapper.RejectRecordMapper;
+import com.dairyfarm.milk.vo.LoadingEntranceVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -31,6 +38,8 @@ public class LoadingRecordService {
     private final LoadingRecordMapper loadingRecordMapper;
     private final MilkBatchMapper milkBatchMapper;
     private final MilkTankMapper milkTankMapper;
+    private final AntibioticTestMapper antibioticTestMapper;
+    private final RejectRecordMapper rejectRecordMapper;
     private final BusinessValidationService validationService;
 
     @Transactional(rollbackFor = Exception.class)
@@ -54,6 +63,7 @@ public class LoadingRecordService {
         loading.setPastureId(batch.getPastureId());
         loading.setDriverId(UserContext.getUserId());
         loading.setTruckNo(dto.getTruckNo());
+        loading.setTransporterName(dto.getTransporterName());
         loading.setLoadVolume(dto.getLoadVolume());
         loading.setLoadTemperature(dto.getLoadTemperature());
         loading.setLoadTime(dto.getLoadTime());
@@ -98,6 +108,90 @@ public class LoadingRecordService {
 
     public LoadingRecord getLoadingDetail(Long id) {
         return loadingRecordMapper.selectById(id);
+    }
+
+    public LoadingEntranceVO getLoadingEntranceStatus(Long batchId) {
+        MilkBatch batch = milkBatchMapper.selectById(batchId);
+        if (batch == null) {
+            throw new BusinessException("批次不存在");
+        }
+
+        MilkTank tank = milkTankMapper.selectById(batch.getTankId());
+
+        LoadingEntranceVO vo = new LoadingEntranceVO();
+        vo.setBatchId(batch.getId());
+        vo.setBatchNo(batch.getBatchNo());
+        vo.setTankId(batch.getTankId());
+        vo.setTankCode(tank != null ? tank.getTankCode() : "");
+        vo.setMilkVolume(batch.getMilkVolume());
+        vo.setBatchStatus(batch.getBatchStatus());
+        vo.setBatchStatusDesc(BatchStatusEnum.getByCode(batch.getBatchStatus()) != null
+                ? BatchStatusEnum.getByCode(batch.getBatchStatus()).getDesc() : batch.getBatchStatus());
+
+        LambdaQueryWrapper<AntibioticTest> testWrapper = new LambdaQueryWrapper<>();
+        testWrapper.eq(AntibioticTest::getBatchId, batchId)
+                .orderByDesc(AntibioticTest::getTestTime)
+                .last("LIMIT 1");
+        AntibioticTest latestTest = antibioticTestMapper.selectOne(testWrapper);
+
+        if (latestTest != null) {
+            vo.setLatestTestResult(latestTest.getTestResult());
+            vo.setLatestTestResultDesc(TestResultEnum.getByCode(latestTest.getTestResult()) != null
+                    ? TestResultEnum.getByCode(latestTest.getTestResult()).getDesc() : latestTest.getTestResult());
+            vo.setTestTime(latestTest.getTestTime());
+            vo.setTestNo(latestTest.getTestNo());
+        }
+
+        boolean canLoad = true;
+        boolean isLocked = false;
+        String lockReason = "";
+        String rejectType = "";
+        String rejectTypeDesc = "";
+
+        if (!BatchStatusEnum.TEST_PASSED.getCode().equals(batch.getBatchStatus())) {
+            canLoad = false;
+            if (BatchStatusEnum.TEST_FAILED.getCode().equals(batch.getBatchStatus())) {
+                isLocked = true;
+                LambdaQueryWrapper<RejectRecord> rejectWrapper = new LambdaQueryWrapper<>();
+                rejectWrapper.eq(RejectRecord::getBatchId, batchId)
+                        .orderByDesc(RejectRecord::getRejectTime)
+                        .last("LIMIT 1");
+                RejectRecord reject = rejectRecordMapper.selectOne(rejectWrapper);
+                if (reject != null) {
+                    lockReason = reject.getRejectReason();
+                    rejectType = reject.getRejectType();
+                    rejectTypeDesc = RejectTypeEnum.getByCode(reject.getRejectType()) != null
+                            ? RejectTypeEnum.getByCode(reject.getRejectType()).getDesc() : reject.getRejectType();
+                } else {
+                    lockReason = "该批次抗生素检测不合格，禁止装车";
+                }
+            } else if (BatchStatusEnum.PENDING_TEST.getCode().equals(batch.getBatchStatus())) {
+                lockReason = "该批次尚未完成检测，请等待检测结果";
+            } else if (BatchStatusEnum.LOADED.getCode().equals(batch.getBatchStatus())) {
+                isLocked = true;
+                lockReason = "该批次已装车，不能重复装车";
+            } else if (BatchStatusEnum.REJECTED.getCode().equals(batch.getBatchStatus())) {
+                isLocked = true;
+                lockReason = "该批次已被拒收，不能装车";
+            } else {
+                lockReason = "批次当前状态不允许装车";
+            }
+        }
+
+        if (canLoad && latestTest != null) {
+            if (!"APPROVED".equals(latestTest.getApproveStatus())) {
+                canLoad = false;
+                lockReason = "检测结果正在审批中，请等待审批完成";
+            }
+        }
+
+        vo.setCanLoad(canLoad);
+        vo.setIsLocked(isLocked);
+        vo.setLockReason(lockReason);
+        vo.setRejectType(rejectType);
+        vo.setRejectTypeDesc(rejectTypeDesc);
+
+        return vo;
     }
 
     @Transactional(rollbackFor = Exception.class)

@@ -5,6 +5,7 @@ import com.dairyfarm.milk.common.Result;
 import com.dairyfarm.milk.dto.LoadingConfirmDTO;
 import com.dairyfarm.milk.entity.LoadingRecord;
 import com.dairyfarm.milk.service.LoadingRecordService;
+import com.dairyfarm.milk.vo.LoadingEntranceVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -39,5 +40,12 @@ public class LoadingRecordController {
     @GetMapping("/{id}")
     public Result<LoadingRecord> getLoadingDetail(@Parameter(description = "装车记录ID") @PathVariable Long id) {
         return Result.success(loadingRecordService.getLoadingDetail(id));
+    }
+
+    @Operation(summary = "查询装车入口状态（含拒收原因）")
+    @GetMapping("/entrance/{batchId}")
+    public Result<LoadingEntranceVO> getLoadingEntranceStatus(
+            @Parameter(description = "批次ID") @PathVariable Long batchId) {
+        return Result.success(loadingRecordService.getLoadingEntranceStatus(batchId));
     }
 }

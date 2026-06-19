@@ -29,6 +29,9 @@ public class LoadingConfirmDTO {
     @Schema(description = "车牌号")
     private String truckNo;
 
+    @Schema(description = "运输责任人姓名")
+    private String transporterName;
+
     @Schema(description = "目的地")
     private String destination;
 

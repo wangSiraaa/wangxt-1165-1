@@ -30,6 +30,9 @@ public class LoadingRecord extends BaseEntity {
     @Schema(description = "司机ID")
     private Long driverId;
 
+    @Schema(description = "运输责任人姓名")
+    private String transporterName;
+
     @Schema(description = "车牌号")
     private String truckNo;
 

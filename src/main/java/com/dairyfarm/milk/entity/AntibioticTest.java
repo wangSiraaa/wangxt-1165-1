@@ -14,6 +14,9 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Schema(description = "抗生素检测实体")
 public class AntibioticTest extends BaseEntity {
 
+    @Schema(description = "父检测单ID(复检关联)")
+    private Long parentId;
+
     @Schema(description = "检测单号")
     private String testNo;
 
@@ -31,6 +34,9 @@ public class AntibioticTest extends BaseEntity {
 
     @Schema(description = "检测类型")
     private String testType;
+
+    @Schema(description = "检测类别: QUICK快检, RECHECK复检")
+    private String testCategory;
 
     @Schema(description = "检测方法")
     private String testMethod;

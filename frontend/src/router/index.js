@@ -79,6 +79,12 @@ const routes = [
         meta: { title: '奶罐管理', icon: 'el-icon-s-cooperation', roles: ['ADMIN'] }
       },
       {
+        path: 'trace',
+        name: 'Trace',
+        component: () => import('@/views/trace/TraceView.vue'),
+        meta: { title: '全链路追踪', icon: 'el-icon-connection' }
+      },
+      {
         path: 'approval/pending',
         name: 'ApprovalPending',
         component: () => import('@/views/approval/ApprovalPending.vue'),

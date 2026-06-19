@@ -48,4 +48,21 @@ public class AntibioticTestController {
     public Result<AntibioticTest> getTestDetail(@Parameter(description = "检测单ID") @PathVariable Long id) {
         return Result.success(antibioticTestService.getTestDetail(id));
     }
+
+    @Operation(summary = "提交复检记录")
+    @PostMapping("/recheck/{parentTestId}")
+    public Result<AntibioticTest> submitRecheck(
+            @Parameter(description = "原检测单ID") @PathVariable Long parentTestId,
+            @Validated @RequestBody AntibioticTestSubmitDTO dto) {
+        return Result.success(antibioticTestService.submitRecheck(parentTestId, dto));
+    }
+
+    @Operation(summary = "查询复检记录列表")
+    @GetMapping("/recheck/{parentTestId}")
+    public Result<Page<AntibioticTest>> getRecheckList(
+            @Parameter(description = "原检测单ID") @PathVariable Long parentTestId,
+            @Parameter(description = "页码") @RequestParam(defaultValue = "1") Long pageNum,
+            @Parameter(description = "每页条数") @RequestParam(defaultValue = "10") Long pageSize) {
+        return Result.success(antibioticTestService.getRecheckList(parentTestId, pageNum, pageSize));
+    }
 }

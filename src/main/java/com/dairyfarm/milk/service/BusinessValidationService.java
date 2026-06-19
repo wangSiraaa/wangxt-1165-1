@@ -10,11 +10,13 @@ import com.dairyfarm.milk.entity.AntibioticTest;
 import com.dairyfarm.milk.entity.LoadingRecord;
 import com.dairyfarm.milk.entity.MilkBatch;
 import com.dairyfarm.milk.entity.MilkTank;
+import com.dairyfarm.milk.entity.RejectRecord;
 import com.dairyfarm.milk.entity.TankCleaning;
 import com.dairyfarm.milk.mapper.AntibioticTestMapper;
 import com.dairyfarm.milk.mapper.LoadingRecordMapper;
 import com.dairyfarm.milk.mapper.MilkBatchMapper;
 import com.dairyfarm.milk.mapper.MilkTankMapper;
+import com.dairyfarm.milk.mapper.RejectRecordMapper;
 import com.dairyfarm.milk.mapper.TankCleaningMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +35,7 @@ public class BusinessValidationService {
     private final AntibioticTestMapper antibioticTestMapper;
     private final LoadingRecordMapper loadingRecordMapper;
     private final TankCleaningMapper tankCleaningMapper;
+    private final RejectRecordMapper rejectRecordMapper;
 
     public void validateTankForNewBatch(Long tankId, Long pastureId) {
         MilkTank tank = milkTankMapper.selectById(tankId);
@@ -46,8 +49,40 @@ public class BusinessValidationService {
             throw new BusinessException("奶罐当前状态为[" + TankStatusEnum.getByCode(tank.getTankStatus()).getDesc() + "]，不能接收新批次");
         }
         if (!isTankCleaned(tankId)) {
-            throw new BusinessException("奶罐未清洗，不能接收新批次，请先进行清洗");
+            throw new BusinessException("奶罐未清洗，不能接收新批次，请先完成清洗并确认合格");
         }
+        if (!isPreviousBatchClosed(tankId)) {
+            throw new BusinessException("奶罐上一批次快检未闭环，不能接入新批次，请先处理上一批次");
+        }
+    }
+
+    public boolean isPreviousBatchClosed(Long tankId) {
+        LambdaQueryWrapper<MilkBatch> batchWrapper = new LambdaQueryWrapper<>();
+        batchWrapper.eq(MilkBatch::getTankId, tankId)
+                .orderByDesc(MilkBatch::getCreateTime)
+                .last("LIMIT 1");
+        MilkBatch lastBatch = milkBatchMapper.selectOne(batchWrapper);
+
+        if (lastBatch == null) {
+            return true;
+        }
+
+        String status = lastBatch.getBatchStatus();
+        if (BatchStatusEnum.TEST_PASSED.getCode().equals(status) ||
+            BatchStatusEnum.LOADED.getCode().equals(status) ||
+            BatchStatusEnum.REJECTED.getCode().equals(status)) {
+            return true;
+        }
+
+        if (BatchStatusEnum.TEST_FAILED.getCode().equals(status)) {
+            LambdaQueryWrapper<RejectRecord> rejectWrapper = new LambdaQueryWrapper<>();
+            rejectWrapper.eq(RejectRecord::getBatchId, lastBatch.getId())
+                    .eq(RejectRecord::getHandleStatus, "RESOLVED");
+            Long resolvedCount = rejectRecordMapper.selectCount(rejectWrapper);
+            return resolvedCount > 0;
+        }
+
+        return false;
     }
 
     public boolean isTankCleaned(Long tankId) {

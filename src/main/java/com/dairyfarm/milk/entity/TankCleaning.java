@@ -51,6 +51,9 @@ public class TankCleaning extends BaseEntity {
     @Schema(description = "检查时间")
     private LocalDateTime checkTime;
 
+    @Schema(description = "确认状态: PENDING待确认, CONFIRMED已确认")
+    private String confirmStatus;
+
     @Schema(description = "备注")
     private String remark;
 }
