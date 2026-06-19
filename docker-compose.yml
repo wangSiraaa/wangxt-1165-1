@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: dairyfarm-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: dairyfarm@2025
+      MYSQL_DATABASE: dairyfarm
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    networks:
+      - dairyfarm-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:6.2-alpine
+    container_name: dairyfarm-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - dairyfarm-network
+    restart: unless-stopped
+
+  backend:
+    build: .
+    container_name: dairyfarm-backend
+    ports:
+      - "19465:19465"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/dairyfarm?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: dairyfarm@2025
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+    depends_on:
+      - mysql
+      - redis
+    networks:
+      - dairyfarm-network
+    restart: unless-stopped
+
+volumes:
+  mysql-data:
+  redis-data:
+
+networks:
+  dairyfarm-network:
+    driver: bridge

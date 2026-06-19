@@ -1,0 +1,92 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body, html, #app {
+  height: 100%;
+  width: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+.container {
+  padding: 20px;
+}
+
+.page-header {
+  margin-bottom: 20px;
+  
+  .title {
+    font-size: 20px;
+    font-weight: 600;
+    color: #303133;
+  }
+}
+
+.search-bar {
+  margin-bottom: 15px;
+  padding: 15px;
+  background: #f5f7fa;
+  border-radius: 4px;
+}
+
+.table-toolbar {
+  margin-bottom: 15px;
+}
+
+.status-tag {
+  &.success {
+    background: #f0f9eb;
+    color: #67c23a;
+    border: 1px solid #c2e7b0;
+  }
+  &.warning {
+    background: #fdf6ec;
+    color: #e6a23c;
+    border: 1px solid #f5dab1;
+  }
+  &.danger {
+    background: #fef0f0;
+    color: #f56c6c;
+    border: 1px solid #fbc4c4;
+  }
+  &.info {
+    background: #ecf5ff;
+    color: #409eff;
+    border: 1px solid #b3d8ff;
+  }
+}
+
+.dashboard-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  
+  .card-header {
+    font-size: 14px;
+    color: #909399;
+    margin-bottom: 10px;
+  }
+  
+  .card-value {
+    font-size: 32px;
+    font-weight: 600;
+    color: #303133;
+  }
+  
+  .card-icon {
+    font-size: 48px;
+    opacity: 0.3;
+  }
+}
+
+.form-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+}

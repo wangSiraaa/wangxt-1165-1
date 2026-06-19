@@ -1,0 +1,54 @@
+spring:
+  application:
+    name: milk-quality-control-test
+  profiles:
+    active: test
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+  datasource:
+    driver-class-name: org.h2.Driver
+    url: jdbc:h2:mem:milk_quality_test;DB_CLOSE_DELAY=-1;MODE=MySQL;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password:
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/migration/V1__init_schema.sql,classpath:db/migration/V3__approval_schema.sql
+      data-locations: classpath:db/migration/V2__init_data.sql
+  flyway:
+    enabled: false
+
+server:
+  port: 19466
+  servlet:
+    context-path: /api
+
+mybatis-plus:
+  mapper-locations: classpath:mapper/**/*.xml
+  type-aliases-package: com.dairyfarm.milk.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+jwt:
+  secret: dairyfarm_milk_quality_control_test_secret_key_2024
+  expire: 86400000
+
+logging:
+  level:
+    com.dairyfarm.milk: debug
+    org.springframework.test: info
+    org.h2: info
