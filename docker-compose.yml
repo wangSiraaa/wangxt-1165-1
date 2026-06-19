@@ -16,17 +16,11 @@ services:
     networks:
       - dairyfarm-network
     restart: unless-stopped
-
-  redis:
-    image: redis:6.2-alpine
-    container_name: dairyfarm-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-    networks:
-      - dairyfarm-network
-    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-pdairyfarm@2025"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   backend:
     build: .
@@ -34,21 +28,23 @@ services:
     ports:
       - "19465:19465"
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/dairyfarm?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-      SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: dairyfarm@2025
-      SPRING_REDIS_HOST: redis
-      SPRING_REDIS_PORT: 6379
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: dairyfarm
+      DB_USERNAME: root
+      DB_PASSWORD: dairyfarm@2025
+      JWT_SECRET: dairyfarm_milk_quality_control_secret_key_2024
+      SPRING_PROFILES_ACTIVE: prod
+      TZ: Asia/Shanghai
     depends_on:
-      - mysql
-      - redis
+      mysql:
+        condition: service_healthy
     networks:
       - dairyfarm-network
     restart: unless-stopped
 
 volumes:
   mysql-data:
-  redis-data:
 
 networks:
   dairyfarm-network:

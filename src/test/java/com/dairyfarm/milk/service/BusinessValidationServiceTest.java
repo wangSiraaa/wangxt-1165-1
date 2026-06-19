@@ -261,4 +261,96 @@ public class BusinessValidationServiceTest {
 
         assertThat(exception.getMessage()).contains("不能重复装车");
     }
+
+    @Test
+    public void test_回归_快检合格且审批通过_可以装车() {
+        testTank = createMilkTank(TankStatusEnum.TESTED.getCode());
+        testBatch = createMilkBatch(testTank, BatchStatusEnum.TEST_PASSED.getCode());
+        testAntibioticTest = createAntibioticTest(testBatch,
+                TestResultEnum.PASSED.getCode(),
+                ApprovalStatusEnum.APPROVED.getCode(), 0);
+
+        businessValidationService.validateTestResultForLoading(testBatch.getId());
+        businessValidationService.validateBatchStatusForLoading(testBatch.getId());
+    }
+
+    @Test
+    public void test_回归_奶罐未清洗_即使空闲也不能接新批次() {
+        testTank = createMilkTank(TankStatusEnum.IDLE.getCode());
+        MilkBatch oldBatch = createMilkBatch(testTank, BatchStatusEnum.LOADED.getCode());
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> {
+            businessValidationService.validateTankForNewBatch(testTank.getId(), testPasture.getId());
+        });
+
+        assertThat(exception.getMessage()).contains("未清洗");
+    }
+
+    @Test
+    public void test_回归_装车后已锁定_isLocked为1_不能修改为合格() {
+        testTank = createMilkTank(TankStatusEnum.LOADED.getCode());
+        testBatch = createMilkBatch(testTank, BatchStatusEnum.LOADED.getCode());
+        testAntibioticTest = createAntibioticTest(testBatch,
+                TestResultEnum.FAILED.getCode(),
+                ApprovalStatusEnum.APPROVED.getCode(), 1);
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> {
+            businessValidationService.validateTestModification(testAntibioticTest.getId());
+        });
+
+        assertThat(exception.getMessage()).contains("已装车")
+                .contains("已锁定");
+    }
+
+    @Test
+    public void test_回归_装车后自动锁定检测结果() {
+        testTank = createMilkTank(TankStatusEnum.TESTED.getCode());
+        testBatch = createMilkBatch(testTank, BatchStatusEnum.TEST_PASSED.getCode());
+        testAntibioticTest = createAntibioticTest(testBatch,
+                TestResultEnum.PASSED.getCode(),
+                ApprovalStatusEnum.APPROVED.getCode(), 0);
+
+        assertThat(testAntibioticTest.getIsLocked()).isEqualTo(0);
+
+        businessValidationService.lockTestResultAfterLoading(testBatch.getId());
+
+        AntibioticTest lockedTest = antibioticTestMapper.selectById(testAntibioticTest.getId());
+        assertThat(lockedTest.getIsLocked()).isEqualTo(1);
+    }
+
+    @Test
+    public void test_回归_审批取消不能装车() {
+        testTank = createMilkTank(TankStatusEnum.TESTED.getCode());
+        testBatch = createMilkBatch(testTank, BatchStatusEnum.TEST_FAILED.getCode());
+        testAntibioticTest = createAntibioticTest(testBatch,
+                TestResultEnum.PASSED.getCode(),
+                ApprovalStatusEnum.CANCELLED.getCode(), 0);
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> {
+            businessValidationService.validateTestResultForLoading(testBatch.getId());
+        });
+
+        assertThat(exception.getMessage()).contains("审批已取消");
+    }
+
+    @Test
+    public void test_回归_奶罐跨牧场不能接批次() {
+        Pasture anotherPasture = new Pasture();
+        anotherPasture.setPastureCode("ANOTHER_PASTURE");
+        anotherPasture.setPastureName("另一个牧场");
+        anotherPasture.setAddress("另一个地址");
+        anotherPasture.setContactPerson("联系人B");
+        anotherPasture.setContactPhone("13900000002");
+        anotherPasture.setStatus(1);
+        pastureMapper.insert(anotherPasture);
+
+        testTank = createMilkTank(TankStatusEnum.IDLE.getCode());
+        createTankCleaning(testTank, true);
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> {
+            businessValidationService.validateTankForNewBatch(testTank.getId(), anotherPasture.getId());
+        });
+
+        assertThat(exception.getMessage()).contains("不属于当前牧场");
+    }
 }
